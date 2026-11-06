@@ -89,11 +89,14 @@ def predict_product(customer_id, top_k=3):
         "top_k": ranked,
     }
 
-
 if __name__ == "__main__":
     import sys
     cid = sys.argv[1] if len(sys.argv) > 1 else "151"
-    res = predict_product(cid)
+    try:
+        res = predict_product(cid)
+    except KeyError as e:
+        print(f"Unknown customer: {e}")
+        sys.exit(1)
     print(f"Customer {res['customer_id']} -> recommended: {res['top_prediction']} "
           f"(confidence {res['confidence']:.0%})")
     for cat, p in res["top_k"]:
