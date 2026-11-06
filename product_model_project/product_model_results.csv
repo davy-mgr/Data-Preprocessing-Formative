@@ -1,0 +1,5 @@
+,Accuracy,Acc std,Macro F1,Log loss
+Baseline (majority),0.224,0.014,0.073,1.602
+Logistic Regression,0.223,0.057,0.183,1.787
+Random Forest,0.218,0.06,0.161,1.651
+XGBoost,0.203,0.053,0.173,1.801
