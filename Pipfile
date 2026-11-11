@@ -1,0 +1,22 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+joblib = "*"
+numpy = "*"
+pandas = "*"
+scikit-learn = "*"
+tensorflow = "*"
+torch = "*"
+matplotlib = "*"
+torchvision = "==0.29.2"
+timm = "*"
+pillow = "*"
+opencv-python-headless = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.14"
