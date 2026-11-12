@@ -158,7 +158,7 @@ def run_transaction(member, face_path, voice_path):
     _preview_inputs(face_path, voice_path)
 
     # ---- Step 1: face -----------------------------------------------------
-    print(dim("  Step 1/3  Face verification"))
+     print(dim("  Step 1/3  Face verification"))
     try:
         from PIL import Image
         with Image.open(face_path) as image:
