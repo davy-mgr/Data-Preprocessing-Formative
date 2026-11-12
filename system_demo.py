@@ -12,7 +12,7 @@ A transaction only reaches the product model if BOTH identity checks pass:
 
 Usage
 -----
-  python system_demo.py                  # scripted demo: 1 authorized + 4 unauthorized
+  python system_demo.py                  # preview each image and voice: 2 authorized + 4 unauthorized
   python system_demo.py run  --member blessing --face PHOTO.jpg --voice CLIP.wav
   python system_demo.py interactive      # prompts for each input
 
@@ -68,6 +68,20 @@ def banner(title):
 def step(label, ok, detail):
     mark = green("PASS") if ok else red("FAIL")
     print(f"  [{mark}] {label:<22} {detail}")
+
+
+def _preview_inputs(face_path, voice_path):
+    from PIL import Image
+
+    with Image.open(face_path) as image:
+        image.show()
+
+    if sys.platform == "win32":
+        import winsound
+
+        winsound.PlaySound(str(voice_path), winsound.SND_FILENAME)
+    else:
+        print(dim("  Voice playback preview is only supported on Windows."))
 
 
 # ---------------------------------------------------------------------------
@@ -140,11 +154,15 @@ def run_transaction(member, face_path, voice_path):
             step("Input files", False, f"file not found: {p}")
             return _deny("input", "input file not found")
 
+    print(dim("  Previewing face image and voice sample..."))
+    _preview_inputs(face_path, voice_path)
+
     # ---- Step 1: face -----------------------------------------------------
     print(dim("  Step 1/3  Face verification"))
-    from PIL import Image
     try:
-        face = face_module().verify_face(Image.open(face_path), member)
+        from PIL import Image
+        with Image.open(face_path) as image:
+            face = face_module().verify_face(image, member)
     except KeyError:
         step("Face verification", False, f"'{member}' is not an enrolled member")
         return _deny("face", "not an enrolled member")
