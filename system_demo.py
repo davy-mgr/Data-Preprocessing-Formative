@@ -263,14 +263,25 @@ def run_scripted_demo(pause):
         if pause:
             input(dim("\n  Press Enter for the next scenario..."))
 
-    banner("SUMMARY")
+    banner("FINAL RESULTS")
     all_ok = True
     for title, expected, granted in results:
         ok = expected == granted
         all_ok &= ok
-        label = "granted" if granted else "denied "
-        print(f"  [{green('OK') if ok else red('!!')}] {label}  {title.split(' (')[0]}")
+        expected_status = "AUTHORIZED" if expected else "UNAUTHORIZED"
+        actual_status = "AUTHORIZED" if granted else "UNAUTHORIZED"
+        status = green("PASS") if ok else red("FAIL")
+        print(f"  {title.split(' (')[0]}: expected {expected_status}, "
+              f"result {actual_status} [{status}]")
+
+    authorized = sum(expected for _, expected, _ in results)
+    unauthorized = len(results) - authorized
+    authorized_passed = sum(expected and granted for _, expected, granted in results)
+    unauthorized_blocked = sum(not expected and not granted
+                               for _, expected, granted in results)
     print()
+    print(f"  Authorized: {authorized_passed}/{authorized} passed")
+    print(f"  Unauthorized: {unauthorized_blocked}/{unauthorized} blocked")
     print(green("  All scenarios behaved as expected.") if all_ok
           else red("  Some scenarios did not behave as expected."))
     return 0 if all_ok else 1
@@ -303,7 +314,7 @@ def main():
     parser = argparse.ArgumentParser(description="Face + voice gated product recommendation demo")
     sub = parser.add_subparsers(dest="command")
 
-    demo = sub.add_parser("demo", help="scripted demo (default)")
+    demo = sub.add_parser("demo", help="run all scripted scenarios (default)")
     demo.add_argument("--pause", action="store_true", help="wait for Enter between scenarios")
 
     run = sub.add_parser("run", help="run one transaction with your own files")
@@ -326,7 +337,7 @@ def main():
         return 0
     if args.command == "demo":
         return run_scripted_demo(pause=args.pause)
-    return run_interactive()
+    return run_scripted_demo(pause=False)
 
 
 if __name__ == "__main__":
