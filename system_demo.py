@@ -1,5 +1,6 @@
 import argparse
 import contextlib
+import gc
 import importlib.util
 import os
 import sys
@@ -67,6 +68,26 @@ def _preview_voice(voice_path):
     else:
         print(dim("  Voice playback preview is only supported on Windows."))
     print(dim("  Compare the preview with the claimed identity."))
+
+
+def _prompt_member():
+    member = input("Registered username: ").strip().lower()
+    if member not in MEMBER_TO_CUSTOMER:
+        print(red("Unknown registered username."))
+        return None
+    return member
+
+
+def _prompt_file(prompt):
+    return Path(input(prompt).strip().strip('"'))
+
+
+def _show_prediction(member, result):
+    print(green(f"  Recommended product for {member.title()}: ")
+          + green(result["top_prediction"])
+          + f"  ({result['confidence']:.0%} confidence)")
+    for category, probability in result["top_k"]:
+        print(f"      {category:<12} {probability:6.1%}")
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +160,7 @@ def _run_transaction(member, face_path, voice_path=None):
 
     _preview_face(face_path)
 
-    # ---- Step 1: face -----------------------------------------------------
+    # ---- Face verification -----------------------------------------------
     print(dim("  Step 2/4  Facial recognition"))
     try:
         from PIL import Image
@@ -148,7 +169,7 @@ def _run_transaction(member, face_path, voice_path=None):
     except KeyError:
         step("Face verification", False, f"'{member}' is not an enrolled member")
         return _deny("face", "not an enrolled member")
-    except RuntimeError as err:
+    except (OSError, RuntimeError) as err:
         step("Face verification", False, str(err))
         return _deny("face", str(err))
 
@@ -157,9 +178,9 @@ def _run_transaction(member, face_path, voice_path=None):
     if not face["accepted"]:
         return _deny("face", "face does not match the claimed identity")
 
-    print(f"  {green('Face accepted.')} Transaction unlocked - product model may now be called.")
+    print(f"  {green('Face accepted.')} Continue to voice verification.")
 
-    # ---- Step 2: voice ----------------------------------------------------
+    # ---- Voice verification ----------------------------------------------
     print(dim("  Step 3/4  Voice verification"))
     if voice_path is None:
         voice_path = input("  Submit voice recording path (.wav): ").strip().strip('"')
@@ -172,7 +193,13 @@ def _run_transaction(member, face_path, voice_path=None):
     print(f"  {dim('Checking the voice recording...')}\n")
     time.sleep(0.4)
 
-    voice = voice_module().verify_voice(str(voice_path), expected_user=member)
+    try:
+        voice = voice_module().verify_voice(str(voice_path), expected_user=member)
+    except MemoryError as err:
+        gc.collect()
+        reason = f"insufficient memory during voice verification: {err}"
+        step("Voice verification", False, reason)
+        return {"granted": False, "stage": "error", "reason": reason}
     step("Voice verification", voice["authorized"],
          f"confidence {voice['confidence']:.2f} - {voice['reason']}")
     if not voice["authorized"]:
@@ -181,7 +208,7 @@ def _run_transaction(member, face_path, voice_path=None):
     print(f"  {green('Voice approved.')} Executing prediction...\n")
     time.sleep(0.4)
 
-    # ---- Step 3: product model --------------------------------------------
+    # ---- Product prediction ----------------------------------------------
     print(dim("  Step 4/4  Product prediction"))
     customer_id = MEMBER_TO_CUSTOMER.get(member)
     if customer_id is None:
@@ -195,12 +222,7 @@ def _run_transaction(member, face_path, voice_path=None):
         return _deny("model", str(err))
 
     step("Product model", True, f"customer {customer_id}")
-    print()
-    print(green("  ACCESS GRANTED") + f"  -  recommended product for {member.title()}: "
-          + green(result["top_prediction"]) + f"  ({result['confidence']:.0%} confidence)")
-    for category, prob in result["top_k"]:
-        bar = "#" * int(prob * 40)
-        print(f"      {category:<12} {prob:6.1%}  {bar}")
+    _show_prediction(member, result)
     return {"granted": True, "stage": "model", "prediction": result}
 
 
@@ -211,6 +233,8 @@ def run_transaction(member, face_path, voice_path=None):
         result = outcome["prediction"]
         print(f"Final result: {result['top_prediction']} "
               f"({result['confidence']:.0%} confidence)")
+    elif outcome["stage"] == "error":
+        print(f"Final result: ERROR - {outcome['reason']}")
     else:
         print(f"Final result: denied at {outcome['stage']} stage - {outcome['reason']}")
     return outcome
@@ -222,6 +246,67 @@ def _deny(stage, reason):
     if stage in ("face", "voice", "input"):
         print(red("  The product model was NOT called."))
     return {"granted": False, "stage": stage, "reason": reason}
+
+
+def _test_face_model():
+    member = _prompt_member()
+    if member is None:
+        return
+    image_path = _prompt_file("Face image path: ")
+    if not image_path.is_file():
+        print(red(f"Image not found: {image_path}"))
+        return
+
+    _preview_face(image_path)
+    try:
+        from PIL import Image
+        with Image.open(image_path) as image:
+            result = face_module().verify_face(image, member)
+    except KeyError:
+        print(red(f"'{member}' is not an enrolled member."))
+        return
+    except (OSError, RuntimeError) as err:
+        print(red(str(err)))
+        return
+
+    step("Face verification", result["accepted"],
+         f"similarity {result['similarity']:.3f} vs cutoff {result['cutoff']:.3f}")
+
+
+def _test_voice_model():
+    member = _prompt_member()
+    if member is None:
+        return
+    voice_path = _prompt_file("Voice recording path (.wav): ")
+    if not voice_path.is_file():
+        print(red(f"Audio not found: {voice_path}"))
+        return
+
+    _preview_voice(voice_path)
+    try:
+        result = voice_module().verify_voice(str(voice_path), expected_user=member)
+    except MemoryError as err:
+        gc.collect()
+        print(red(f"Voice verification could not complete: {err}"))
+        return
+    step("Voice verification", result["authorized"],
+         f"speaker {result['predicted_user'] or 'unknown'}, "
+         f"confidence {result['confidence']:.2f} - {result['reason']}")
+
+
+def _test_product_model():
+    member = _prompt_member()
+    if member is None:
+        return
+
+    customer_id = MEMBER_TO_CUSTOMER[member]
+    try:
+        with _in_dir(PRODUCT_DIR):
+            result = product_module().predict_product(customer_id)
+    except KeyError as err:
+        print(red(str(err)))
+        return
+    _show_prediction(member, result)
 
 
 # ---------------------------------------------------------------------------
@@ -259,29 +344,38 @@ def run_scripted_demo(pause):
     for sc in _scenarios():
         banner(sc["title"])
         outcome = run_transaction(sc["member"], sc["face"], sc["voice"])
-        results.append((sc["title"], sc["expect"], outcome["granted"]))
+        results.append((sc["title"], sc["expect"], outcome))
         if pause:
             input(dim("\n  Press Enter for the next scenario..."))
 
     banner("FINAL RESULTS")
     all_ok = True
-    for title, expected, granted in results:
-        ok = expected == granted
+    for title, expected, outcome in results:
+        error = outcome.get("stage") == "error"
+        granted = outcome["granted"]
+        ok = not error and expected == granted
         all_ok &= ok
         expected_status = "AUTHORIZED" if expected else "UNAUTHORIZED"
-        actual_status = "AUTHORIZED" if granted else "UNAUTHORIZED"
+        actual_status = "ERROR" if error else (
+            "AUTHORIZED" if granted else "UNAUTHORIZED"
+        )
         status = green("PASS") if ok else red("FAIL")
         print(f"  {title.split(' (')[0]}: expected {expected_status}, "
               f"result {actual_status} [{status}]")
 
     authorized = sum(expected for _, expected, _ in results)
     unauthorized = len(results) - authorized
-    authorized_passed = sum(expected and granted for _, expected, granted in results)
-    unauthorized_blocked = sum(not expected and not granted
-                               for _, expected, granted in results)
+    authorized_passed = sum(expected and outcome["granted"] and outcome.get("stage") != "error"
+                            for _, expected, outcome in results)
+    unauthorized_blocked = sum(not expected and not outcome["granted"]
+                               and outcome.get("stage") != "error"
+                               for _, expected, outcome in results)
+    errors = sum(outcome.get("stage") == "error" for _, _, outcome in results)
     print()
     print(f"  Authorized: {authorized_passed}/{authorized} passed")
     print(f"  Unauthorized: {unauthorized_blocked}/{unauthorized} blocked")
+    if errors:
+        print(red(f"  System errors: {errors}"))
     print(green("  All scenarios behaved as expected.") if all_ok
           else red("  Some scenarios did not behave as expected."))
     return 0 if all_ok else 1
@@ -291,19 +385,33 @@ def run_scripted_demo(pause):
 # Interactive mode
 # ---------------------------------------------------------------------------
 def run_interactive():
-    banner("WELCOME")
-    print("  Complete face and voice verification to get a product recommendation.")
-    print("  Enrolled members:", ", ".join(sorted(MEMBER_TO_CUSTOMER)))
-    print(dim("  (Ctrl+C to quit)\n"))
+    banner("MODEL TEST APP")
+    print("  Registered members:", ", ".join(sorted(MEMBER_TO_CUSTOMER)))
     try:
         while True:
-            member = input("\nStep 1 - Enter registered username: ").strip()
-            face = input("Step 2 - Submit face image path: ").strip().strip('"')
-            print()
-            run_transaction(member, face)
-            if input("\n  Another transaction? [y/N] ").strip().lower() != "y":
+            print("\n  1. Face recognition")
+            print("  2. Voice verification")
+            print("  3. Product prediction")
+            print("  4. Full transaction")
+            print("  5. Run all demo scenarios")
+            print("  0. Exit")
+            choice = input("Choose a model or action: ").strip()
+            if choice == "0":
                 break
-            print()
+            if choice == "1":
+                _test_face_model()
+            elif choice == "2":
+                _test_voice_model()
+            elif choice == "3":
+                _test_product_model()
+            elif choice == "4":
+                member = _prompt_member()
+                if member is not None:
+                    run_transaction(member, _prompt_file("Face image path: "))
+            elif choice == "5":
+                run_scripted_demo(pause=False)
+            else:
+                print(red("Choose an option from 0 to 5."))
     except (KeyboardInterrupt, EOFError):
         print("\n  Bye.")
     return 0
@@ -314,7 +422,7 @@ def main():
     parser = argparse.ArgumentParser(description="Face + voice gated product recommendation demo")
     sub = parser.add_subparsers(dest="command")
 
-    demo = sub.add_parser("demo", help="run all scripted scenarios (default)")
+    demo = sub.add_parser("demo", help="run all scripted scenarios")
     demo.add_argument("--pause", action="store_true", help="wait for Enter between scenarios")
 
     run = sub.add_parser("run", help="run one transaction with your own files")
@@ -322,7 +430,7 @@ def main():
     run.add_argument("--face", required=True, help="path to face image")
     run.add_argument("--voice", required=True, help="path to voice .wav")
 
-    sub.add_parser("interactive", help="interactive transaction")
+    sub.add_parser("interactive", help="choose and test models interactively")
     sub.add_parser("members", help="list enrolled members and linked customer IDs")
 
     args = parser.parse_args()
@@ -337,7 +445,7 @@ def main():
         return 0
     if args.command == "demo":
         return run_scripted_demo(pause=args.pause)
-    return run_scripted_demo(pause=False)
+    return run_interactive()
 
 
 if __name__ == "__main__":
