@@ -1,23 +1,3 @@
-#!/usr/bin/env python3
-"""
-system_demo.py - Command-line demonstration of the full multimodal pipeline.
-
-    Face image  -->  Voice approval  -->  Product recommendation
-
-A transaction only reaches the product model if BOTH identity checks pass:
-
-  Step 1  FACE   verify_face(image, member)    -> unlocks the transaction
-  Step 2  VOICE  verify_voice(clip, member)    -> approves + executes prediction
-  Step 3  MODEL  predict_product(customer_id)  -> recommendation is displayed
-
-Usage
------
-  python system_demo.py                  # preview each image and voice: 2 authorized + 4 unauthorized
-  python system_demo.py run  --member blessing --face PHOTO.jpg --voice CLIP.wav
-  python system_demo.py interactive      # prompts for each input
-
-Requires the packages in the Pipfile (torch, torchvision, librosa, scikit-learn...).
-"""
 import argparse
 import contextlib
 import importlib.util
@@ -70,18 +50,23 @@ def step(label, ok, detail):
     print(f"  [{mark}] {label:<22} {detail}")
 
 
-def _preview_inputs(face_path, voice_path):
+def _preview_face(face_path):
     from PIL import Image
 
+    print(f"  Face preview   : {face_path}")
     with Image.open(face_path) as image:
         image.show()
 
+
+def _preview_voice(voice_path):
     if sys.platform == "win32":
         import winsound
 
+        print(f"  Voice playback: {voice_path}")
         winsound.PlaySound(str(voice_path), winsound.SND_FILENAME)
     else:
         print(dim("  Voice playback preview is only supported on Windows."))
+    print(dim("  Compare the preview with the claimed identity."))
 
 
 # ---------------------------------------------------------------------------
@@ -137,28 +122,25 @@ def product_module():
 # ---------------------------------------------------------------------------
 # The transaction
 # ---------------------------------------------------------------------------
-def run_transaction(member, face_path, voice_path):
+def _run_transaction(member, face_path, voice_path=None):
     """
     Run one transaction end to end. Returns a dict with the outcome:
         {"granted": bool, "stage": "face"|"voice"|"model", ...}
     """
     member = member.strip().lower()
-    face_path, voice_path = Path(face_path), Path(voice_path)
+    face_path = Path(face_path)
     print(f"  Claimed identity : {member}")
     print(f"  Face image       : {face_path.name}")
-    print(f"  Voice sample     : {voice_path.name}")
     print()
 
-    for p in (face_path, voice_path):
-        if not p.exists():
-            step("Input files", False, f"file not found: {p}")
-            return _deny("input", "input file not found")
+    if not face_path.is_file():
+        step("Face image", False, f"file not found: {face_path}")
+        return _deny("input", "face image not found")
 
-    print(dim("  Previewing face image and voice sample..."))
-    _preview_inputs(face_path, voice_path)
+    _preview_face(face_path)
 
     # ---- Step 1: face -----------------------------------------------------
-     print(dim("  Step 1/3  Face verification"))
+    print(dim("  Step 2/4  Facial recognition"))
     try:
         from PIL import Image
         with Image.open(face_path) as image:
@@ -176,11 +158,20 @@ def run_transaction(member, face_path, voice_path):
         return _deny("face", "face does not match the claimed identity")
 
     print(f"  {green('Face accepted.')} Transaction unlocked - product model may now be called.")
-    print(f"  {dim('Say your approval phrase to execute the prediction...')}\n")
-    time.sleep(0.4)
 
     # ---- Step 2: voice ----------------------------------------------------
-    print(dim("  Step 2/3  Voice approval"))
+    print(dim("  Step 3/4  Voice verification"))
+    if voice_path is None:
+        voice_path = input("  Submit voice recording path (.wav): ").strip().strip('"')
+    voice_path = Path(voice_path)
+    print(f"  Voice sample     : {voice_path.name}")
+    if not voice_path.is_file():
+        step("Voice sample", False, f"file not found: {voice_path}")
+        return _deny("input", "voice sample not found")
+    _preview_voice(voice_path)
+    print(f"  {dim('Checking the voice recording...')}\n")
+    time.sleep(0.4)
+
     voice = voice_module().verify_voice(str(voice_path), expected_user=member)
     step("Voice verification", voice["authorized"],
          f"confidence {voice['confidence']:.2f} - {voice['reason']}")
@@ -191,7 +182,7 @@ def run_transaction(member, face_path, voice_path):
     time.sleep(0.4)
 
     # ---- Step 3: product model --------------------------------------------
-    print(dim("  Step 3/3  Product recommendation"))
+    print(dim("  Step 4/4  Product prediction"))
     customer_id = MEMBER_TO_CUSTOMER.get(member)
     if customer_id is None:
         step("Product model", False, f"no customer record linked to '{member}'")
@@ -211,6 +202,18 @@ def run_transaction(member, face_path, voice_path):
         bar = "#" * int(prob * 40)
         print(f"      {category:<12} {prob:6.1%}  {bar}")
     return {"granted": True, "stage": "model", "prediction": result}
+
+
+def run_transaction(member, face_path, voice_path=None):
+    outcome = _run_transaction(member, face_path, voice_path)
+    print("\n" + cyan("TRANSACTION COMPLETED"))
+    if outcome["granted"]:
+        result = outcome["prediction"]
+        print(f"Final result: {result['top_prediction']} "
+              f"({result['confidence']:.0%} confidence)")
+    else:
+        print(f"Final result: denied at {outcome['stage']} stage - {outcome['reason']}")
+    return outcome
 
 
 def _deny(stage, reason):
@@ -277,16 +280,16 @@ def run_scripted_demo(pause):
 # Interactive mode
 # ---------------------------------------------------------------------------
 def run_interactive():
-    banner("INTERACTIVE TRANSACTION")
+    banner("WELCOME")
+    print("  Complete face and voice verification to get a product recommendation.")
     print("  Enrolled members:", ", ".join(sorted(MEMBER_TO_CUSTOMER)))
     print(dim("  (Ctrl+C to quit)\n"))
     try:
         while True:
-            member = input("  Who are you claiming to be?   ").strip()
-            face = input("  Path to face image:           ").strip().strip('"')
-            voice = input("  Path to voice clip (.wav):    ").strip().strip('"')
+            member = input("\nStep 1 - Enter registered username: ").strip()
+            face = input("Step 2 - Submit face image path: ").strip().strip('"')
             print()
-            run_transaction(member, face, voice)
+            run_transaction(member, face)
             if input("\n  Another transaction? [y/N] ").strip().lower() != "y":
                 break
             print()
@@ -308,7 +311,7 @@ def main():
     run.add_argument("--face", required=True, help="path to face image")
     run.add_argument("--voice", required=True, help="path to voice .wav")
 
-    sub.add_parser("interactive", help="prompt for each input")
+    sub.add_parser("interactive", help="interactive transaction")
     sub.add_parser("members", help="list enrolled members and linked customer IDs")
 
     args = parser.parse_args()
@@ -321,7 +324,9 @@ def main():
         for member, customer_id in sorted(MEMBER_TO_CUSTOMER.items()):
             print(f"  {member:<12} customer {customer_id}")
         return 0
-    return run_scripted_demo(pause=getattr(args, "pause", False))
+    if args.command == "demo":
+        return run_scripted_demo(pause=args.pause)
+    return run_interactive()
 
 
 if __name__ == "__main__":
