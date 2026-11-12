@@ -288,6 +288,7 @@ def main():
     run.add_argument("--voice", required=True, help="path to voice .wav")
 
     sub.add_parser("interactive", help="prompt for each input")
+    sub.add_parser("members", help="list enrolled members and linked customer IDs")
 
     args = parser.parse_args()
     if args.command == "run":
@@ -295,6 +296,10 @@ def main():
         return 0 if outcome["granted"] else 2
     if args.command == "interactive":
         return run_interactive()
+    if args.command == "members":
+        for member, customer_id in sorted(MEMBER_TO_CUSTOMER.items()):
+            print(f"  {member:<12} customer {customer_id}")
+        return 0
     return run_scripted_demo(pause=getattr(args, "pause", False))
 
 
