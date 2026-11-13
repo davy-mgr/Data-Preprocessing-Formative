@@ -26,4 +26,4 @@ a, n = run("Genuine clips", genuine)
 b, m = run("Unauthorized clips", outsiders)
 
 print(f"\nGenuine accepted:      {a}/{n}")
-print(f"Outsiders rejected:    {m - b}/{m}   <- put this number in your report")
+print(f"Outsiders rejected:    {m - b}/{m}")
