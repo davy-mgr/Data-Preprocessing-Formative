@@ -2,12 +2,8 @@
 build_audio_features.py
 1) plots waveform + spectrogram for every clip  -> plots/
 2) applies augmentations (saved as wav in data/audio_aug/)
-3) extracts features                            -> audio_features.csv
+3) extracts features                           
 
-Member clips:    data/audio/               <member>_<yesapprove|confirm>_<NN>.wav
-Outsider clips:  data/audio_unauthorized/  (labelled 'unknown' in the CSV)
-
-Run:  python build_audio_features.py
 """
 import os, glob
 import numpy as np
