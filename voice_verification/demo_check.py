@@ -1,8 +1,3 @@
-"""
-demo_check.py - tests verify_voice on clips the model has NEVER trained on.
-Usage:  python demo_check.py blessing
-(claims the identity 'blessing': his own clips should pass, demo_clips outsiders should fail)
-"""
 import os, sys, glob
 from voice_verification import verify_voice
 

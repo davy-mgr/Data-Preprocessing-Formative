@@ -9,7 +9,6 @@ from torchvision import transforms
 
 HERE = Path(__file__).resolve().parent
 FEATURES_PATH = HERE / "image_features.csv"
-# Fixed from the neutral/smile enrollment scores in facial_rec.ipynb.
 CUTOFF = 0.534
 
 _cache = {}

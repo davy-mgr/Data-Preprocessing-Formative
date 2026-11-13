@@ -12,11 +12,6 @@ FACE_DIR = ROOT / "facial_recognition_model"
 VOICE_DIR = ROOT / "voice_verification"
 PRODUCT_DIR = ROOT / "product_model_project"
 
-# ---------------------------------------------------------------------------
-# EDIT ME: which customer record belongs to which team member.
-# The datasets have no names, so this link is an assumption. These IDs were
-# picked because they have several past transactions in merged_dataset.csv.
-# ---------------------------------------------------------------------------
 MEMBER_TO_CUSTOMER = {
     "blessing": 161,
     "davy": 159,
@@ -24,9 +19,6 @@ MEMBER_TO_CUSTOMER = {
     "kagaba": 188,
 }
 
-# ---------------------------------------------------------------------------
-# Terminal styling (plain text when output is piped or NO_COLOR is set)
-# ---------------------------------------------------------------------------
 _COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 
 
@@ -90,10 +82,6 @@ def _show_prediction(member, result):
         print(f"      {category:<12} {probability:6.1%}")
 
 
-# ---------------------------------------------------------------------------
-# Loading the three existing modules (by file path, so the folder named
-# "voice_verification" never shadows the module of the same name)
-# ---------------------------------------------------------------------------
 def _load_module(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
@@ -140,9 +128,6 @@ def product_module():
     return _modules["product"]
 
 
-# ---------------------------------------------------------------------------
-# The transaction
-# ---------------------------------------------------------------------------
 def _run_transaction(member, face_path, voice_path=None):
     """
     Run one transaction end to end. Returns a dict with the outcome:
@@ -160,7 +145,7 @@ def _run_transaction(member, face_path, voice_path=None):
 
     _preview_face(face_path)
 
-    # ---- Face verification -----------------------------------------------
+    #Face verification
     print(dim("  Step 2/4  Facial recognition"))
     try:
         from PIL import Image
@@ -180,7 +165,7 @@ def _run_transaction(member, face_path, voice_path=None):
 
     print(f"  {green('Face accepted.')} Continue to voice verification.")
 
-    # ---- Voice verification ----------------------------------------------
+    #Voice verification
     print(dim("  Step 3/4  Voice verification"))
     if voice_path is None:
         voice_path = input("  Submit voice recording path (.wav): ").strip().strip('"')
@@ -208,7 +193,7 @@ def _run_transaction(member, face_path, voice_path=None):
     print(f"  {green('Voice approved.')} Executing prediction...\n")
     time.sleep(0.4)
 
-    # ---- Product prediction ----------------------------------------------
+    #Product prediction
     print(dim("  Step 4/4  Product prediction"))
     customer_id = MEMBER_TO_CUSTOMER.get(member)
     if customer_id is None:
@@ -308,10 +293,8 @@ def _test_product_model():
         return
     _show_prediction(member, result)
 
+#Scripted demonstration
 
-# ---------------------------------------------------------------------------
-# Scripted demonstration
-# ---------------------------------------------------------------------------
 def _scenarios():
     img = FACE_DIR / "images"
     aud = VOICE_DIR / "data" / "audio"
@@ -380,10 +363,8 @@ def run_scripted_demo(pause):
           else red("  Some scenarios did not behave as expected."))
     return 0 if all_ok else 1
 
+#Interactive mode
 
-# ---------------------------------------------------------------------------
-# Interactive mode
-# ---------------------------------------------------------------------------
 def run_interactive():
     banner("MODEL TEST APP")
     print("  Registered members:", ", ".join(sorted(MEMBER_TO_CUSTOMER)))
@@ -416,8 +397,6 @@ def run_interactive():
         print("\n  Bye.")
     return 0
 
-
-# ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Face + voice gated product recommendation demo")
     sub = parser.add_subparsers(dest="command")

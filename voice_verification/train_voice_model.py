@@ -1,14 +1,3 @@
-"""
-train_voice_model.py - trains + evaluates the voiceprint verification model.
-
-Classes = each team member + 'unknown' (outsiders).
-
-Evaluation is leave-one-CLIP-out: all rows (original + augmented) of one
-recording are held out together, and we score only the held-out ORIGINAL clip.
-This prevents leakage from augmented copies and works with very few recordings.
-
-Run:  python train_voice_model.py
-"""
 import os
 import warnings
 warnings.filterwarnings("ignore", message="Unknown solver options")
@@ -40,12 +29,12 @@ classes = np.array(sorted(y.unique()))
 for name, model in models.items():
     true, pred, probas = [], [], []
     for tr, te in LeaveOneGroupOut().split(X, y, groups):
-        te = [i for i in te if df.augmentation.iloc[i] == "orig"]   # score originals only
+        te = [i for i in te if df.augmentation.iloc[i] == "orig"]
         if not te:
             continue
         model.fit(X.iloc[tr], y.iloc[tr])
         p = model.predict_proba(X.iloc[te])
-        full = np.zeros((len(te), len(classes)))                      # align if a class is missing
+        full = np.zeros((len(te), len(classes)))
         for j, c in enumerate(model.classes_):
             full[:, list(classes).index(c)] = p[:, j]
         true += list(y.iloc[te]); pred += list(classes[full.argmax(1)]); probas.append(full)
@@ -63,8 +52,8 @@ pd.DataFrame(results).T.to_csv(os.path.join(HERE, "voice_model_results.csv"))
 best = max(results, key=lambda n: (results[n]["f1_macro"], -results[n]["log_loss"]))
 print("Best model:", best)
 
-final = models[best].fit(X, y)           # refit on everything
-THRESHOLD = 0.5                          # outsiders are rejected by the 'unknown' class
+final = models[best].fit(X, y)
+THRESHOLD = 0.5
 
 joblib.dump(dict(model=final, feature_cols=cols, threshold=THRESHOLD, classes=list(final.classes_)),
             os.path.join(HERE, "voice_model.joblib"))

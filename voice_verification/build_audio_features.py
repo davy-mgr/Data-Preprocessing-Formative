@@ -1,10 +1,3 @@
-"""
-build_audio_features.py
-1) plots waveform + spectrogram for every clip  -> plots/
-2) applies augmentations (saved as wav in data/audio_aug/)
-3) extracts features                           
-
-"""
 import os, glob
 import numpy as np
 import pandas as pd
