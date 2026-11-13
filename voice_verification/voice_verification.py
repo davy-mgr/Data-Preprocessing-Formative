@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(HERE, "voice_model.joblib")
 
 
-# ---------- loading ----------
+#loading 
 def load_audio(path):
     """Load as mono 16 kHz and trim leading/trailing silence."""
     y, _ = librosa.load(path, sr=SR, mono=True)
@@ -24,7 +24,7 @@ def load_audio(path):
     return y
 
 
-# ---------- augmentation ----------
+# augmentation
 def augment(y, sr=SR, seed=42):
     """Return {name: signal}. Small changes only, so speaker identity is kept."""
     rng = np.random.default_rng(seed)
@@ -40,7 +40,7 @@ def augment(y, sr=SR, seed=42):
     }
 
 
-# ---------- features ----------
+# features 
 def extract_features(y, sr=SR):
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
     f = {}
@@ -56,7 +56,7 @@ def extract_features(y, sr=SR):
     return f
 
 
-# ---------- verification ----------
+# verification 
 def verify_voice(path, expected_user=None, threshold=None):
     """
     Returns a dict:
